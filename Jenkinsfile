@@ -19,10 +19,32 @@ pipeline {
                     credentialsId: 'github-cred'
             }
         }
-    stage('Build with Maven') {
+
+        stage('Build with Maven') {
             steps {
                 sh 'mvn clean package'
             }
         }
-      }
+
+        stage('Deploy to Docker Server') {
+            steps {
+                sshagent(['docker-server-cred']) {
+                    sh """
+                        # Copy jar and Dockerfile to server
+                        scp  target/my-app-1.0-SNAPSHOT.jar ${DOCKER_USER}@${DOCKER_HOST}:/home/${DOCKER_USER}/
+                        scp Dockerfile ${DOCKER_USER}@${DOCKER_HOST}:/home/${DOCKER_USER}/
+
+                        # Build and run container
+                        ssh ${DOCKER_USER}@${DOCKER_HOST} '
+                           sudo docker build -t ${IMAGE_NAME} /home/${DOCKER_USER}/
+                           sudo docker stop ${APP_NAME} || true
+                           sudo docker rm ${APP_NAME} || true
+                           sudo docker run -d --name ${APP_NAME} -p 8080:8080 ${IMAGE_NAME}
+                        '
+                    """
+                }
+            }
+        }
     }
+}
+
